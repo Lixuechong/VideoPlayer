@@ -3,6 +3,7 @@
 
 #include <jni.h>
 #include "util.h"
+#include "Log.h"
 
 class JNICallbackHelper {
 private:

@@ -7,6 +7,7 @@
 #include "VideoChannel.h"
 #include "JNICallbackHelper.h"
 #include "util.h"
+#include "Log.h"
 
 extern "C" {
 #include <libavformat/avformat.h>

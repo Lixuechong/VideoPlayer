@@ -44,6 +44,7 @@ void VideoPlayer::prepare_() {
     int result = avformat_open_input(&formatContext, this->data_source, nullptr, &dictionary);
     av_dict_free(&dictionary); // 释放字典,自我理解是把字典中的内容赋值到上下文中，所以此处不需要字典了。
     if (result) {
+        LOGD("第一步异常\n")
         this->helper->onError("第一步异常", THREAD_CHILD);
         return;
     }
@@ -51,6 +52,7 @@ void VideoPlayer::prepare_() {
     // 第二步，查询媒体中的音视频流信息
     result = avformat_find_stream_info(formatContext, nullptr);
     if (result < 0) {
+        LOGD("第二步异常\n")
         this->helper->onError("第二步异常", THREAD_CHILD);
         return;
     }
@@ -73,6 +75,7 @@ void VideoPlayer::prepare_() {
         // 第七步，通过上下文，协助解码器进行播放
         AVCodecContext *codecContext = avcodec_alloc_context3(codec);
         if (!codecContext) {
+            LOGD("第七步异常\n")
             this->helper->onError("第七步异常", THREAD_CHILD);
             return;
         }
@@ -80,13 +83,15 @@ void VideoPlayer::prepare_() {
         // 第八步，把流的参数赋值给解码器的上下文。（第七步的codecContext只是创建指针对象，并没有实际内容）
         result = avcodec_parameters_to_context(codecContext, parameters);
         if (result < 0) {
+            LOGD("第八步异常\n")
             this->helper->onError("第八步异常", THREAD_CHILD);
             return;
         }
 
         // 第九步，打开解码器
-        result = avcodec_open2(codecContext, codec, nullptr);
+        result = avcodec_open2(codecContext, codec, 0);
         if (result) {
+            LOGD("第九步异常\n")
             this->helper->onError("第九步异常", THREAD_CHILD);
             return;
         }
@@ -102,12 +107,14 @@ void VideoPlayer::prepare_() {
 
     // 第十一步，如果流中没有音频也没有视频。（对流进行再次校验）
     if (!this->audio_channel && !this->video_channel) {
+        LOGD("第十一步异常\n")
         this->helper->onError("第十一步异常", THREAD_CHILD);
         return;
     }
 
     // 第十二步，prepare完成。通知Java层。
     if(this->helper) {
+        LOGD("prepare完成\n")
         this->helper->onPrepared(THREAD_CHILD);
     }
 }

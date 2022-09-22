@@ -85,7 +85,7 @@ public class VideoPlayer {
     /**
      * 由Jni通过反射调用，通知Java资源已准备
      */
-    public void _jni_prepared() {
+    private void jni_prepared() {
         Log.d(TAG, "_jni_prepared");
         if (onPreparedListener != null) {
             onPreparedListener.onPrepared();
@@ -97,7 +97,7 @@ public class VideoPlayer {
      *
      * @param error 异常信息
      */
-    public void _jni_error(String error) {
+    private void jni_error(String error) {
         Log.d(TAG, "_jni_error msg is " + error);
         if (onErrorListener != null) {
             onErrorListener.onError(error);
