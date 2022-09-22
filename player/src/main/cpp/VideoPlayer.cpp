@@ -88,10 +88,16 @@ void VideoPlayer::prepare_() {
             return;
         }
 
+        if (parameters->codec_type != AVMediaType::AVMEDIA_TYPE_AUDIO
+            && parameters->codec_type != AVMediaType::AVMEDIA_TYPE_VIDEO) {
+            continue;
+        }
+
         // 第九步，打开解码器
         result = avcodec_open2(codecContext, codec, 0);
         if (result) {
-            LOGD("第九步异常\n")
+            LOGD("第九步异常码:%d,流类型:%d,音频流编码:%d,视频流编码:%d\n", result, parameters->codec_type,
+                 AVMediaType::AVMEDIA_TYPE_AUDIO, AVMediaType::AVMEDIA_TYPE_VIDEO)
             this->helper->onError("第九步异常", THREAD_CHILD);
             return;
         }
@@ -113,7 +119,7 @@ void VideoPlayer::prepare_() {
     }
 
     // 第十二步，prepare完成。通知Java层。
-    if(this->helper) {
+    if (this->helper) {
         LOGD("prepare完成\n")
         this->helper->onPrepared(THREAD_CHILD);
     }
