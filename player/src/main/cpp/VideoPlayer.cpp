@@ -45,7 +45,8 @@ void VideoPlayer::prepare_() {
     av_dict_free(&dictionary); // 释放字典,自我理解是把字典中的内容赋值到上下文中，所以此处不需要字典了。
     if (result) {
         LOGD("第一步异常\n")
-        this->helper->onError("第一步异常", THREAD_CHILD);
+        char *error_info = av_err2str(result);
+        this->helper->onError(error_info, THREAD_CHILD);
         return;
     }
 
@@ -53,7 +54,8 @@ void VideoPlayer::prepare_() {
     result = avformat_find_stream_info(formatContext, nullptr);
     if (result < 0) {
         LOGD("第二步异常\n")
-        this->helper->onError("第二步异常", THREAD_CHILD);
+        char *error_info = av_err2str(result);
+        this->helper->onError(error_info, THREAD_CHILD);
         return;
     }
 
@@ -71,12 +73,18 @@ void VideoPlayer::prepare_() {
 
         // 第六步，获取解码器（根据上面的参数）,解码播放，编码封包
         AVCodec *codec = avcodec_find_decoder(parameters->codec_id);
+        if(!codec) {
+            LOGD("第六步异常\n")
+            char *error_info = av_err2str(result);
+            this->helper->onError(error_info, THREAD_CHILD);
+        }
 
         // 第七步，通过上下文，协助解码器进行播放
         AVCodecContext *codecContext = avcodec_alloc_context3(codec);
         if (!codecContext) {
             LOGD("第七步异常\n")
-            this->helper->onError("第七步异常", THREAD_CHILD);
+            char *error_info = av_err2str(result);
+            this->helper->onError(error_info, THREAD_CHILD);
             return;
         }
 
@@ -84,7 +92,8 @@ void VideoPlayer::prepare_() {
         result = avcodec_parameters_to_context(codecContext, parameters);
         if (result < 0) {
             LOGD("第八步异常\n")
-            this->helper->onError("第八步异常", THREAD_CHILD);
+            char *error_info = av_err2str(result);
+            this->helper->onError(error_info, THREAD_CHILD);
             return;
         }
 
@@ -98,7 +107,8 @@ void VideoPlayer::prepare_() {
         if (result) {
             LOGD("第九步异常码:%d,流类型:%d,音频流编码:%d,视频流编码:%d\n", result, parameters->codec_type,
                  AVMediaType::AVMEDIA_TYPE_AUDIO, AVMediaType::AVMEDIA_TYPE_VIDEO)
-            this->helper->onError("第九步异常", THREAD_CHILD);
+            char *error_info = av_err2str(result);
+            this->helper->onError(error_info, THREAD_CHILD);
             return;
         }
 
@@ -114,7 +124,8 @@ void VideoPlayer::prepare_() {
     // 第十一步，如果流中没有音频也没有视频。（对流进行再次校验）
     if (!this->audio_channel && !this->video_channel) {
         LOGD("第十一步异常\n")
-        this->helper->onError("第十一步异常", THREAD_CHILD);
+        char *error_info = av_err2str(result);
+        this->helper->onError(error_info, THREAD_CHILD);
         return;
     }
 
