@@ -6,10 +6,26 @@
 #define VIDEOPLAYER_VIDEOCHANNEL_H
 
 
-class VideoChannel {
+#include "BaseChannel.h"
+
+class VideoChannel : public BaseChannel {
+
+private:
+    pthread_t pid_video_decode;
+    pthread_t pid_video_play;
 
 public:
-    VideoChannel();
+    VideoChannel(int, AVCodecContext *);
+
+    virtual ~VideoChannel();
+
+    void stop();
+
+    void start();
+
+    void video_decode();
+
+    void video_play();
 };
 
 

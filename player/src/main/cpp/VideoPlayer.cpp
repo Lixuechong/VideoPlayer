@@ -73,7 +73,7 @@ void VideoPlayer::prepare_() {
 
         // 第六步，获取解码器（根据上面的参数）,解码播放，编码封包
         AVCodec *codec = avcodec_find_decoder(parameters->codec_id);
-        if(!codec) {
+        if (!codec) {
             LOGD("第六步异常\n")
             char *error_info = av_err2str(result);
             this->helper->onError(error_info, THREAD_CHILD);
@@ -114,10 +114,10 @@ void VideoPlayer::prepare_() {
 
         // 第十步，从编解码器参数中，获取流的类型
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO) { // 音频流
-            this->audio_channel = new AudioChannel();
+            this->audio_channel = new AudioChannel(i, codecContext);
         }
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
-            this->video_channel = new VideoChannel();
+            this->video_channel = new VideoChannel(i, codecContext);
         }
     }
 
@@ -143,3 +143,66 @@ void VideoPlayer::prepare() {
     // data_source 是一个文件io流，或者rtmp流，必须使用子线程。
     pthread_create(&pid_prepare, nullptr, task_prepare, this);
 }
+
+
+/**
+ * 子线程回调的函数
+ */
+void *task_start(void *args) {
+
+    auto *player = static_cast<VideoPlayer *>(args);
+    player->start_();
+    return nullptr; // 必须返回数据
+}
+
+void VideoPlayer::start_() {
+
+    // 第一步，把媒体压缩包保存到对应的数据队列中.
+
+    while (is_playing) {
+        // AVPacket 是压缩包的类型(音频和视频的帧数据，都在这个包中)
+        AVPacket *packet = av_packet_alloc();
+        // 此时，formatContext中存在了流媒体的数据源，可以直接读取。
+        int result = av_read_frame(this->formatContext, packet); // 从媒体中读取音/视频包.
+        if (!result) { // if(result) 表示 if(result != null)
+
+            // 把AVPacket假如队列，提前区分音频和视频，加入不同的数据队列
+
+            // if条件表示为视频
+            if (video_channel && video_channel->stream_index == packet->stream_index) {
+                video_channel->packets.insertToQueue(packet);
+            }
+
+            // if条件表示为音频
+            if (audio_channel && audio_channel->stream_index == packet->stream_index) {
+//                    audio_channel->packets.insertToQueue(packet);
+            }
+        } else if (result == AVERROR_EOF) { // 表示流媒体读取完毕
+            // 但并不代表播放完成。
+            // todo
+        } else {
+            break; //av_read_frame出现异常。
+        }
+    }
+    is_playing = false;
+    if(video_channel) {
+        video_channel->stop();
+    }
+
+}
+
+void VideoPlayer::start() {
+
+    is_playing = true;
+
+    // 第二步，开启播放。
+    if(video_channel) {
+        video_channel->start();
+    }
+
+    // 开启线程把压缩包放入压缩队列
+    pthread_create(&pid_start, 0, task_start, this);
+
+}
+
+

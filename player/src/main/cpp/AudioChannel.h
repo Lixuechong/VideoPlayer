@@ -1,11 +1,14 @@
 #ifndef VIDEOPLAYER_AUDIOCHANNEL_H
 #define VIDEOPLAYER_AUDIOCHANNEL_H
 
+#include "BaseChannel.h"
 
-class AudioChannel {
+class AudioChannel: public BaseChannel {
 
 public:
-    AudioChannel();
+    AudioChannel(int, AVCodecContext *);
+
+    virtual ~AudioChannel();
 };
 
 #endif //VIDEOPLAYER_AUDIOCHANNEL_H

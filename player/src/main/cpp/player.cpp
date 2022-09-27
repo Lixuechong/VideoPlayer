@@ -11,6 +11,7 @@ Java_com_lxc_player_NativeLib_stringFromJNI(
     return env->NewStringUTF(hello.c_str());
 }
 
+VideoPlayer * player = 0;
 JavaVM *vm = 0;
 
 /**
@@ -29,7 +30,7 @@ Java_com_lxc_player_VideoPlayer_prepareNative(JNIEnv *env, jobject thiz, jstring
     //使用new关键字创建的对象，是在堆中申请的空间。
     auto *helper = new JNICallbackHelper(vm, env, thiz);
     const char *data_source_ = env->GetStringUTFChars(data_source, 0);
-    auto *player = new VideoPlayer(data_source_, helper);
+    player = new VideoPlayer(data_source_, helper);
     player->prepare();
     env->ReleaseStringUTFChars(data_source, data_source_);
 }
@@ -37,6 +38,11 @@ Java_com_lxc_player_VideoPlayer_prepareNative(JNIEnv *env, jobject thiz, jstring
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_lxc_player_VideoPlayer_startNative(JNIEnv *env, jobject thiz) {
+
+    if(player) {
+        player->start();
+    }
+
 }
 
 extern "C"
