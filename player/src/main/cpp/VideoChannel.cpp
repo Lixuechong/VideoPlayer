@@ -119,7 +119,25 @@ void VideoChannel::video_play() {
                   dst_data, // 输出渲染的数据
                   dst_line_size // 输出渲染的大小
         );
+
+        // 把rgba渲染到屏幕上。
+        // 如何渲染一帧图像？
+        // 答：需要 宽/高/数据
+
+        // 把渲染数据传递给player.cpp
+        renderCallback(dst_data[0],  // 数组被传递会退化成指针
+                       codecContext->width,
+                       codecContext->height,
+                       dst_line_size[0]);
+
+        releaseAVFrame(&frame); // 此处不考虑回退，所以渲染完成后可以直接被释放。
     }
+
+    releaseAVFrame(&frame);
+    sws_freeContext(sws_context);
+    is_playing = false;
+    av_free(dst_data);
+    av_free(dst_line_size);
 }
 
 void VideoChannel::start() {
@@ -134,4 +152,8 @@ void VideoChannel::start() {
 
     // 该线程用于从frame队列中取出解码包，播放。
     pthread_create(&pid_video_play, 0, task_video_play, this);
+}
+
+void VideoChannel::setRenderCallback(RenderCallback renderCallback) {
+    this->renderCallback = renderCallback;
 }

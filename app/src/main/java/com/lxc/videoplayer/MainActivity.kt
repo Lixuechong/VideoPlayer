@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.view.SurfaceView
 import android.widget.Toast
 import com.lxc.player.VideoPlayer
 import java.io.File
@@ -14,9 +15,13 @@ class MainActivity : AppCompatActivity() {
 
     private var player: VideoPlayer? = null
 
+    private var surfaceView: SurfaceView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        surfaceView = findViewById(R.id.surfaceView)
 
         player = VideoPlayer()
         val file =
@@ -24,6 +29,7 @@ class MainActivity : AppCompatActivity() {
         val path = file.path
         Log.d(TAG, path)
         player?.setDataSource(path)
+        player?.bindSurfaceView(surfaceView)
 
         player?.setOnPreparedListener {
             runOnUiThread {

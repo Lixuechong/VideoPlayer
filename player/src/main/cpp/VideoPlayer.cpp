@@ -15,9 +15,11 @@ VideoPlayer::VideoPlayer(const char *data_source, JNICallbackHelper *helper) {
 VideoPlayer::~VideoPlayer() {
     if (this->data_source) {
         delete this->data_source;
+        this->data_source = 0;
     }
     if (this->helper) {
         delete this->helper;
+        this->helper = 0;
     }
 }
 
@@ -118,6 +120,7 @@ void VideoPlayer::prepare_() {
         }
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
             this->video_channel = new VideoChannel(i, codecContext);
+            this->video_channel->setRenderCallback(this->renderCallback);
         }
     }
 
@@ -185,7 +188,7 @@ void VideoPlayer::start_() {
         }
     }
     is_playing = false;
-    if(video_channel) {
+    if (video_channel) {
         video_channel->stop();
     }
 
@@ -196,13 +199,17 @@ void VideoPlayer::start() {
     is_playing = true;
 
     // 第二步，开启播放。
-    if(video_channel) {
+    if (video_channel) {
         video_channel->start();
     }
 
     // 开启线程把压缩包放入压缩队列
     pthread_create(&pid_start, 0, task_start, this);
 
+}
+
+void VideoPlayer::setRenderCallback(RenderCallback renderCallback) {
+    this->renderCallback = renderCallback;
 }
 
 

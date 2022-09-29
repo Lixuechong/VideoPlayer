@@ -13,6 +13,8 @@ extern "C" {
 #include <libavformat/avformat.h>
 }
 
+
+
 class VideoPlayer {
 
 private:
@@ -23,6 +25,7 @@ private:
     VideoChannel *video_channel = 0;
     JNICallbackHelper *helper = 0;
     bool is_playing = false; // 是否播放
+    RenderCallback  renderCallback;
 
 public:
     AVFormatContext *formatContext = 0;
@@ -36,6 +39,8 @@ public:
 
     void start();
     void start_();
+
+    void setRenderCallback(RenderCallback renderCallback);
 
 };
 
