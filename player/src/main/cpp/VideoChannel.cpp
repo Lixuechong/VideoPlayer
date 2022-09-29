@@ -63,6 +63,8 @@ void VideoChannel::video_decode() {
         frames.insertToQueue(frame);
     }
 
+    is_playing = false;
+
     releaseAVPacket(&packet);
 }
 
@@ -144,10 +146,10 @@ void VideoChannel::start() {
     is_playing = true;
 
     // 队列开始工作
-    packets.working(1);
-    frames.working(1);
+    packets.working(true);
+    frames.working(true);
 
-    // 该线程用于从packet队列取出压缩包，进行解码。解码后再次放入frame队列。
+    // 该线程用于从packet队列取出压缩包，进行解码。解码后再次放入frame队列。(yuv格式)
     pthread_create(&pid_video_decode, 0, task_video_decode, this);
 
     // 该线程用于从frame队列中取出解码包，播放。

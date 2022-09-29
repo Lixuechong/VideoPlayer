@@ -178,7 +178,7 @@ void VideoPlayer::start_() {
 
             // if条件表示为音频
             if (audio_channel && audio_channel->stream_index == packet->stream_index) {
-//                    audio_channel->packets.insertToQueue(packet);
+                    audio_channel->packets.insertToQueue(packet);
             }
         } else if (result == AVERROR_EOF) { // 表示流媒体读取完毕
             // 但并不代表播放完成。
@@ -191,6 +191,9 @@ void VideoPlayer::start_() {
     if (video_channel) {
         video_channel->stop();
     }
+    if (audio_channel) {
+        audio_channel->stop();
+    }
 
 }
 
@@ -201,6 +204,10 @@ void VideoPlayer::start() {
     // 第二步，开启播放。
     if (video_channel) {
         video_channel->start();
+    }
+
+    if (audio_channel) {
+        audio_channel->start();
     }
 
     // 开启线程把压缩包放入压缩队列
