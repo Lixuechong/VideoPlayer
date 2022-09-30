@@ -62,9 +62,19 @@ void *task_audio_decode(void *args) {
 }
 
 void AudioChannel::audio_decode() {
-    AVPacket *packet = 0;
+    AVPacket *packet = nullptr;
 
     while (is_playing) {
+
+        bool is_limit = false;
+        if (is_playing) {
+            beyondLimitsWithFrames(&is_limit);
+        }
+        if (is_limit) {
+            av_usleep(2 * 1000); // 单位微秒
+            continue;
+        }
+
         int result = packets.popQueueAndDel(packet); // 阻塞式队列
 
         if (!is_playing) { // 用户停止播放,跳出循环并释放资源。
@@ -79,7 +89,9 @@ void AudioChannel::audio_decode() {
         result = avcodec_send_packet(codecContext, packet);
 
         //avcodec_send_packet 会把packet进行深拷贝，所以可以直接在这里释放。
-        releaseAVPacket(&packet);
+//        releaseAVPacket(&packet); // 这里的释放是释放对象本身。
+
+
         if (result != 0) {
             //这里各种异常
             break;
@@ -93,15 +105,23 @@ void AudioChannel::audio_decode() {
             // IBP的理论???
             // 当不是关键帧时，无法通过单独的一帧解码。所以可以继续，参考下一帧进行解码。
             continue;
-        } else if (result != 0) {
+        } else if (result != 0) {// 失败
+            if (frame) {
+                releaseAVFrame(&frame);
+            }
             break;
         }
 
         frames.insertToQueue(frame);
+
+        // 此时把packet完全释放。释放packet对象，和packet成员指向的空间。 先释放内部成员，再释放本身。
+        av_packet_unref(packet); // AVPacket对象成员中，也存在开辟堆空间的指针，所以需要用api把对象成员的堆空间释放。
+        releaseAVPacket(&packet);
+
     }
 
     is_playing = false;
-
+    av_packet_unref(packet);
     releaseAVPacket(&packet);
 }
 
@@ -308,9 +328,9 @@ void AudioChannel::start() {
  * @param p_int
  */
 void AudioChannel::getPcm(int *p_int) {
-    int pcm_data_size = 0;
+    int pcm_data_size;
     // 从frames队列中获取PCM数据。此时数据为PCM格式，并未重采样。
-    AVFrame *frame = 0;
+    AVFrame *frame = nullptr;
     while (is_playing) {
         int ret = frames.popQueueAndDel(frame);
         if (!is_playing) {
@@ -323,7 +343,7 @@ void AudioChannel::getPcm(int *p_int) {
         // 开始重采样
 
         // 来源：10个48000   ---->  目标:44100  11个44100
-        // 获取单通道的采样点数 (计算目标样本数： ？ 10个48000 --->  48000/44100因为除不尽  11个44100)
+        // 获取单通道的采样点数（j即为一帧的采样点数） (计算目标样本数： ？ 10个48000 --->  48000/44100因为除不尽  11个44100)
         int dst_nb_samples = av_rescale_rnd(swr_get_delay(swr_ctx, frame->sample_rate) +
                                             frame->nb_samples, // 获取下一个输入样本相对于下一个输出样本将经历的延迟
                                             out_sample_rate, // 输出采样率
@@ -344,8 +364,13 @@ void AudioChannel::getPcm(int *p_int) {
                                               frame->nb_samples); // 输入的样本数
 
         // 由于out_buffers 和 dst_nb_samples 无法对应，所以需要重新计算
-        pcm_data_size = samples_per_channel * out_sample_size * out_channels; // 941通道样本数  *  2样本格式字节数  *  2声道数  =3764
+        pcm_data_size = samples_per_channel * out_sample_size *
+                        out_channels; // 941通道样本数  *  2样本格式字节数  *  2声道数  =3764
         *p_int = pcm_data_size;
+
+        av_frame_unref(frame);
+        releaseAVFrame(&frame);
+
         break;
     }
 }

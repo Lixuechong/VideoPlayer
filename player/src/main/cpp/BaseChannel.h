@@ -5,9 +5,12 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/time.h>
 };
 
 #include "SafeQueue.h"
+
+#define MAX_SIZE_QUEUE 100
 
 class BaseChannel {
 public:
@@ -31,11 +34,33 @@ public:
     }
 
     /**
+     * 压缩包队列是否超过阈值
+     */
+    void beyondLimitsWithPackets(bool *limit) {
+        if (packets.size() >= MAX_SIZE_QUEUE) {
+            *limit = true;
+        } else {
+            *limit = false;
+        }
+    }
+
+    /**
+     * 解码包队列是否超过阈值
+     */
+    void beyondLimitsWithFrames(bool *limit) {
+        if (frames.size() >= MAX_SIZE_QUEUE) {
+            *limit = true;
+        } else {
+            *limit = false;
+        }
+    }
+
+    /**
      * 释放队列中的AVPacket
      * @param p
      */
     static void releaseAVPacket(AVPacket **p) {
-        if(p) {
+        if (p) {
             av_packet_free(p); // 释放队列中的T
             *p = 0;
         }
@@ -46,7 +71,7 @@ public:
      * @param p
      */
     static void releaseAVFrame(AVFrame **p) {
-        if(p) {
+        if (p) {
             av_frame_free(p); // 释放队列中的T
             *p = 0;
         }

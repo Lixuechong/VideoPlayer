@@ -1,5 +1,4 @@
 
-
 #include "VideoPlayer.h"
 
 VideoPlayer::VideoPlayer(const char *data_source, JNICallbackHelper *helper) {
@@ -15,11 +14,11 @@ VideoPlayer::VideoPlayer(const char *data_source, JNICallbackHelper *helper) {
 VideoPlayer::~VideoPlayer() {
     if (this->data_source) {
         delete this->data_source;
-        this->data_source = 0;
+        this->data_source = nullptr;
     }
     if (this->helper) {
         delete this->helper;
-        this->helper = 0;
+        this->helper = nullptr;
     }
 }
 
@@ -64,11 +63,11 @@ void VideoPlayer::prepare_() {
     // 此时说明流是一个合格的流媒体。
 
     // 第三步，根据流信息，流的个数，用循环来找音频流和视频流。
-    int i = 0;
-    for (; i < this->formatContext->nb_streams; i++) {
+    int stream_index = 0;
+    for (; stream_index < this->formatContext->nb_streams; stream_index++) {
 
         // 第四步，获取媒体流（音频流/视频流/字幕流)
-        AVStream *stream = this->formatContext->streams[i];
+        AVStream *stream = this->formatContext->streams[stream_index];
 
         // 第五步，从流中获取编码解码的参数(包含了所有的视频、音频、字幕参数)
         AVCodecParameters *parameters = stream->codecpar;
@@ -105,7 +104,7 @@ void VideoPlayer::prepare_() {
         }
 
         // 第九步，打开解码器
-        result = avcodec_open2(codecContext, codec, 0);
+        result = avcodec_open2(codecContext, codec, nullptr);
         if (result) {
             LOGD("第九步异常码:%d,流类型:%d,音频流编码:%d,视频流编码:%d\n", result, parameters->codec_type,
                  AVMediaType::AVMEDIA_TYPE_AUDIO, AVMediaType::AVMEDIA_TYPE_VIDEO)
@@ -116,10 +115,10 @@ void VideoPlayer::prepare_() {
 
         // 第十步，从编解码器参数中，获取流的类型
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO) { // 音频流
-            this->audio_channel = new AudioChannel(i, codecContext);
+            this->audio_channel = new AudioChannel(stream_index, codecContext);
         }
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
-            this->video_channel = new VideoChannel(i, codecContext);
+            this->video_channel = new VideoChannel(stream_index, codecContext);
             this->video_channel->setRenderCallback(this->renderCallback);
         }
     }
@@ -163,6 +162,26 @@ void VideoPlayer::start_() {
     // 第一步，把媒体压缩包保存到对应的数据队列中.
 
     while (is_playing) {
+
+        // 判断如果生产视频编码包太快，超过阈值，则让生产队列等待。
+        bool is_limit = false;
+        if (video_channel) {
+            video_channel->beyondLimitsWithPackets(&is_limit);
+        }
+        if (is_limit) {
+            av_usleep(2 * 1000); // 单位微秒
+            continue;
+        }
+
+        // 注意，一般来说，音频解码比视频解码速度更快，所以音频压缩包队列一定比视频压缩包队列解码速度快，只需要判断视频压缩包队列即可.
+//        if (audio_channel) {
+//            audio_channel->beyondLimitsWithPackets(&is_limit);
+//        }
+//        if (is_limit) {
+//            av_usleep(2 * 1000); // 单位微秒
+//            continue;
+//        }
+
         // AVPacket 是压缩包的类型(音频和视频的帧数据，都在这个包中)
         AVPacket *packet = av_packet_alloc();
         // 此时，formatContext中存在了流媒体的数据源，可以直接读取。
@@ -178,11 +197,15 @@ void VideoPlayer::start_() {
 
             // if条件表示为音频
             if (audio_channel && audio_channel->stream_index == packet->stream_index) {
-                    audio_channel->packets.insertToQueue(packet);
+                audio_channel->packets.insertToQueue(packet);
             }
         } else if (result == AVERROR_EOF) { // 表示流媒体读取完毕
             // 但并不代表播放完成。
-            // todo
+            // 此处文件读取到末尾时，判断编码包队列中是否还存在数据，如果没有数据表示视频已经播放完毕。此时退出while循环。
+            if (video_channel && video_channel->frames.empty()
+                && audio_channel && audio_channel->frames.empty()) {
+                break;
+            }
         } else {
             break; //av_read_frame出现异常。
         }

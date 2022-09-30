@@ -28,6 +28,15 @@ void VideoChannel::video_decode() {
     AVPacket *packet = 0;
 
     while (is_playing) {
+        bool is_limit = false;
+        if(is_playing) {
+            beyondLimitsWithFrames(&is_limit);
+        }
+        if (is_limit) {
+            av_usleep(2 * 1000); // 单位微秒
+            continue;
+        }
+
         int result = packets.popQueueAndDel(packet); // 阻塞式队列
 
         if (!is_playing) { // 用户停止播放,跳出循环并释放资源。
@@ -42,7 +51,8 @@ void VideoChannel::video_decode() {
         result = avcodec_send_packet(codecContext, packet);
 
         //avcodec_send_packet 会把packet进行深拷贝，所以可以直接在这里释放。
-        releaseAVPacket(&packet);
+//        releaseAVPacket(&packet);
+
         if (result != 0) {
             //这里各种异常
             break;
@@ -56,15 +66,22 @@ void VideoChannel::video_decode() {
             // IBP的理论???
             // 当不是关键帧时，无法通过单独的一帧解码。所以可以继续，参考下一帧进行解码。
             continue;
-        } else if (result != 0) {
+        } else if (result != 0) { // 失败
+            if(frame) {
+                releaseAVFrame(&frame);
+            }
             break;
         }
 
         frames.insertToQueue(frame);
+
+        // 此时把packet完全释放。释放packet对象，和packet成员指向的空间。 先释放内部成员，再释放本身。
+        av_packet_unref(packet); // AVPacket对象成员中，也存在开辟堆空间的指针，所以需要用api把对象成员的堆空间释放。
+        releaseAVPacket(&packet);
     }
 
     is_playing = false;
-
+    av_packet_unref(packet);
     releaseAVPacket(&packet);
 }
 
@@ -132,9 +149,11 @@ void VideoChannel::video_play() {
                        codecContext->height,
                        dst_line_size[0]);
 
+        av_frame_unref(frame);
         releaseAVFrame(&frame); // 此处不考虑回退，所以渲染完成后可以直接被释放。
     }
 
+    av_frame_unref(frame);
     releaseAVFrame(&frame);
     sws_freeContext(sws_context);
     is_playing = false;
