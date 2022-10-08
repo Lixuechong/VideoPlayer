@@ -98,6 +98,8 @@ void VideoPlayer::prepare_() {
             return;
         }
 
+        LOGD("流类型 %d \n", parameters->codec_type)
+
         if (parameters->codec_type != AVMediaType::AVMEDIA_TYPE_AUDIO
             && parameters->codec_type != AVMediaType::AVMEDIA_TYPE_VIDEO) {
             continue;
@@ -114,10 +116,13 @@ void VideoPlayer::prepare_() {
         }
 
         // 第十步，从编解码器参数中，获取流的类型
-        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO) { // 音频流
+        // 注意：this->audio_channel == nullptr此处判空，主要用于防止重复创建。媒体流的类型可能重复。
+        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO
+            && this->audio_channel == nullptr) { // 音频流
             this->audio_channel = new AudioChannel(stream_index, codecContext);
         }
-        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
+        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO
+            && this->video_channel == nullptr) { // 视频流
             this->video_channel = new VideoChannel(stream_index, codecContext);
             this->video_channel->setRenderCallback(this->renderCallback);
         }
@@ -160,7 +165,7 @@ void *task_start(void *args) {
 void VideoPlayer::start_() {
 
     // 第一步，把媒体压缩包保存到对应的数据队列中.
-
+    // 注意：如果音频采样率较高（单通道采样数为1024），视频帧率较低时，此时音频包的生产速度大于视频包生产速度。
     while (is_playing) {
 
         // 判断如果生产视频编码包太快，超过阈值，则让生产队列等待。
@@ -168,19 +173,22 @@ void VideoPlayer::start_() {
         if (video_channel) {
             video_channel->beyondLimitsWithPackets(&is_limit);
         }
+
         if (is_limit) {
             av_usleep(2 * 1000); // 单位微秒
             continue;
         }
 
-        // 注意，一般来说，音频解码比视频解码速度更快，所以音频压缩包队列一定比视频压缩包队列解码速度快，只需要判断视频压缩包队列即可.
-//        if (audio_channel) {
-//            audio_channel->beyondLimitsWithPackets(&is_limit);
-//        }
-//        if (is_limit) {
-//            av_usleep(2 * 1000); // 单位微秒
-//            continue;
-//        }
+        if (audio_channel) {
+            audio_channel->beyondLimitsWithPackets(&is_limit);
+        }
+        if (is_limit) {
+            av_usleep(2 * 1000); // 单位微秒
+            continue;
+        }
+
+        LOGD("audio_channel size %d, is limit %d, video_channel size %d\n",
+             audio_channel->packets.size(), is_limit, video_channel->packets.size())
 
         // AVPacket 是压缩包的类型(音频和视频的帧数据，都在这个包中)
         AVPacket *packet = av_packet_alloc();
@@ -191,19 +199,18 @@ void VideoPlayer::start_() {
             // 把AVPacket假如队列，提前区分音频和视频，加入不同的数据队列
 
             // if条件表示为视频
-            if (video_channel && video_channel->stream_index == packet->stream_index) {
+            if (video_channel->stream_index == packet->stream_index) {
                 video_channel->packets.insertToQueue(packet);
             }
 
             // if条件表示为音频
-            if (audio_channel && audio_channel->stream_index == packet->stream_index) {
+            if (audio_channel->stream_index == packet->stream_index) {
                 audio_channel->packets.insertToQueue(packet);
             }
         } else if (result == AVERROR_EOF) { // 表示流媒体读取完毕
             // 但并不代表播放完成。
             // 此处文件读取到末尾时，判断编码包队列中是否还存在数据，如果没有数据表示视频已经播放完毕。此时退出while循环。
-            if (video_channel && video_channel->frames.empty()
-                && audio_channel && audio_channel->frames.empty()) {
+            if (video_channel->frames.empty() && audio_channel->frames.empty()) {
                 break;
             }
         } else {
