@@ -166,10 +166,14 @@ void VideoPlayer::start_() {
 
     // 第一步，把媒体压缩包保存到对应的数据队列中.
     // 注意：如果音频采样率较高（单通道采样数为1024），视频帧率较低时，此时音频包的生产速度大于视频包生产速度。
+
+    bool videoReadFinished = false;
+    bool is_limit = false;
+
     while (is_playing) {
 
         // 判断如果生产视频编码包太快，超过阈值，则让生产队列等待。
-        bool is_limit = false;
+
         if (video_channel) {
             video_channel->beyondLimitsWithPackets(&is_limit);
         }
@@ -179,11 +183,14 @@ void VideoPlayer::start_() {
             continue;
         }
 
-        if (audio_channel) {
-            audio_channel->beyondLimitsWithPackets(&is_limit);
+        if (video_channel) {
+            video_channel->isEmptyVideoQueue(&videoReadFinished);
         }
-        if (is_limit) {
-            av_usleep(2 * 1000); // 单位微秒
+
+        if (videoReadFinished) {
+            if (video_channel->frames.empty() && audio_channel->frames.empty()) {
+                break;
+            }
             continue;
         }
 

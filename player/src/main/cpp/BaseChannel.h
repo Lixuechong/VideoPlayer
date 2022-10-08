@@ -13,6 +13,9 @@ extern "C" {
 #define MAX_SIZE_QUEUE 100
 
 class BaseChannel {
+
+private:
+    int zero_count = 0; // 视频队列数量为0的循环次数.
 public:
     // VideoPlayer.cpp prepare的第三步.formatContext->nb_streams
     int stream_index; // 音/视频的下标 ，在使用for循环时获取的数据流的类型。是这个流的下标，并不是一帧的下标。
@@ -31,6 +34,20 @@ public:
     virtual ~BaseChannel() {
         packets.clear();
         frames.clear();
+    }
+
+    /**
+     * 视频压缩包是否采集完成
+     */
+    void isEmptyVideoQueue(bool *finished) {
+        if (zero_count >= MAX_SIZE_QUEUE) {
+            *finished = true;
+        } else {
+            if(packets.size() == 0) {
+                zero_count++;
+            }
+            *finished = false;
+        }
     }
 
     /**
