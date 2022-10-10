@@ -9,9 +9,9 @@
 void task_drop_frame(queue<AVFrame *> &q) {
     if (!q.empty()) {
         AVFrame *frame = q.front();
+        av_frame_unref(frame);
         BaseChannel::releaseAVFrame(&frame);
         q.pop();
-
     }
 }
 
@@ -19,6 +19,7 @@ void task_drop_packet(queue<AVPacket *> &q) {
     while (!q.empty()) {
         AVPacket *packet = q.front();
         if (packet->flags != AV_PKT_FLAG_KEY) { // 如果不是I帧
+            av_packet_unref(packet);
             BaseChannel::releaseAVPacket(&packet);
             q.pop();
         } else {
@@ -148,6 +149,14 @@ void VideoChannel::video_play() {
             SWS_BILINEAR, // 格式转换的算法，各种类型，需要学习.
             NULL, NULL, NULL
     );
+
+    // 定义临时变量
+    double extra_delay;
+    double fps_delay;
+    double real_delay;
+    double video_time;
+    double audio_time;
+    double time_diff;
     while (is_playing) {
         int result = frames.popQueueAndDel(frame);
         if (!is_playing) { // 用户停止播放,跳出循环并释放资源。
@@ -155,6 +164,10 @@ void VideoChannel::video_play() {
         }
 
         if (!result) {
+            if (frame) {
+                av_frame_unref(frame);
+                releaseAVFrame(&frame);
+            }
             continue;
         }
 
@@ -176,21 +189,21 @@ void VideoChannel::video_play() {
         // 在回调渲染之前，对视频帧进行数据进度矫正。
         // 加入FPS间隔时间。
         // 额外延时时间（在之前编码时，帧之间的延时时间）
-        double extra_delay = frame->repeat_pict / (2 * fps); // 可能获取不到(编码时没有加入额外延时)。
+        extra_delay = frame->repeat_pict / (2 * fps); // 可能获取不到(编码时没有加入额外延时)。
         // fps延时时间 (计算每一帧的延时时间)
-        double fps_delay = 1.0 / fps;
+        fps_delay = 1.0 / fps;
         // 当前帧的延时时间
-        double real_delay = fps_delay + extra_delay;
+        real_delay = fps_delay + extra_delay;
         // 当前帧间隔. 这里只是根据视频的fps，进行间隔，与音频并不同步。
 //        av_usleep(real_delay * 1000000);
 
         // 与音频同步
 
         // 获取音视频的当前帧时间戳
-        double video_time = frame->best_effort_timestamp * av_q2d(time_base);
-        double audio_time = audio_channel->audio_time;
+        video_time = frame->best_effort_timestamp * av_q2d(time_base);
+        audio_time = audio_channel->audio_time;
         // 定义差值
-        double time_diff = video_time - audio_time;
+        time_diff = video_time - audio_time;
         // 判断两个时间差值
         if (time_diff > 0) { // 视频播放相对音频较快
             if (time_diff > 1) { // 视频播放速度比音频播放速度间隔大于1s(差距大)
