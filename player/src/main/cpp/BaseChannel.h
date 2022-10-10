@@ -24,8 +24,12 @@ public:
     bool is_playing;
     AVCodecContext *codecContext = 0; // 音/视频解码器的上下文
 
-    BaseChannel(int streamIndex, AVCodecContext *codecContext) : stream_index(streamIndex),
-                                                                 codecContext(codecContext) {
+    AVRational time_base; // 时间基
+
+    BaseChannel(int streamIndex, AVCodecContext *codecContext, AVRational time_base) :
+            stream_index(streamIndex),
+            codecContext(codecContext),
+            time_base(time_base) {
 
         packets.setReleaseCallback(releaseAVPacket);
         frames.setReleaseCallback(releaseAVFrame);
@@ -43,7 +47,7 @@ public:
         if (zero_count >= MAX_SIZE_QUEUE) {
             *finished = true;
         } else {
-            if(packets.size() == 0) {
+            if (packets.size() == 0) {
                 zero_count++;
             }
             *finished = false;

@@ -115,15 +115,22 @@ void VideoPlayer::prepare_() {
             return;
         }
 
+        // 获取时间基
+        AVRational time_base = stream->time_base;
+
         // 第十步，从编解码器参数中，获取流的类型
         // 注意：this->audio_channel == nullptr此处判空，主要用于防止重复创建。媒体流的类型可能重复。
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO
             && this->audio_channel == nullptr) { // 音频流
-            this->audio_channel = new AudioChannel(stream_index, codecContext);
+            this->audio_channel = new AudioChannel(stream_index, codecContext, time_base);
         }
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO
             && this->video_channel == nullptr) { // 视频流
-            this->video_channel = new VideoChannel(stream_index, codecContext);
+            // 获取视频的fps(一秒多少帧)
+            AVRational fps_rational = stream->avg_frame_rate;
+            int fps = av_q2d(fps_rational);
+
+            this->video_channel = new VideoChannel(stream_index, codecContext, time_base, fps);
             this->video_channel->setRenderCallback(this->renderCallback);
         }
     }
@@ -240,6 +247,7 @@ void VideoPlayer::start() {
 
     // 第二步，开启播放。
     if (video_channel) {
+        video_channel->setAudioChannel(audio_channel);
         video_channel->start();
     }
 

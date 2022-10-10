@@ -11,13 +11,15 @@ class SafeQueue {
 
 private:
     typedef void (*ReleaseCallback)(T *);// 函数指针定义 作为回调
+    typedef void (*SyncCallback)(queue<T> &);// 函数指针定义 作为回调 用来完成丢帧工作
 
 private:
-    queue <T> queue; // 队列
+    queue<T> queue; // 队列
     pthread_mutex_t mutex; // 互斥锁，用于线程安全。
     pthread_cond_t cond; // 条件变量，用于控制线程睡眠和唤醒。
     bool work = false; // 标记队列是否工作
     ReleaseCallback releaseCallback;
+    SyncCallback syncCallback;
 
 public:
 
@@ -116,6 +118,23 @@ public:
     void setReleaseCallback(ReleaseCallback releaseCallback) {
         this->releaseCallback = releaseCallback;
     }
+
+    void setSyncCallback(SyncCallback callback) {
+        this->syncCallback = callback;
+    }
+
+    /**
+     * 同步操作 丢包
+     */
+     void sync() {
+        pthread_mutex_lock(&mutex);
+
+        if(syncCallback) {
+            syncCallback(queue);
+        }
+
+        pthread_mutex_unlock(&mutex);
+     }
 
 };
 

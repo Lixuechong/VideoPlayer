@@ -25,6 +25,8 @@ public:
 
     SwrContext * swr_ctx = 0;
 
+    double audio_time; // 音频时间戳,当前播放的时间戳。
+
 public:
     //引擎
     SLObjectItf engineObject = 0;
@@ -41,7 +43,7 @@ public:
     SLAndroidSimpleBufferQueueItf bqPlayerBufferQueue = 0;
 
 public:
-    AudioChannel(int, AVCodecContext *);
+    AudioChannel(int, AVCodecContext *, AVRational);
 
     virtual ~AudioChannel();
 

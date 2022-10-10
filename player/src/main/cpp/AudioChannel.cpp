@@ -8,8 +8,8 @@
  * 音频压缩数据包格式AAC，大部分是44100、32位、双声道。
  *
  */
-AudioChannel::AudioChannel(int stream_index, AVCodecContext *codecContext)
-        : BaseChannel(stream_index, codecContext) {
+AudioChannel::AudioChannel(int stream_index, AVCodecContext *codecContext, AVRational time_base)
+        : BaseChannel(stream_index, codecContext, time_base) {
     // 缓冲区大小怎么定义？答：涉及到声音三要素。
     // 手机大部分的位声是16bit，2声道，44100.
     // 音频压缩包大部分是32bit，2声道，44100. 32bit的算法运算效率高。（浮点型为什么运算效率高？？？）
@@ -107,6 +107,7 @@ void AudioChannel::audio_decode() {
             continue;
         } else if (result != 0) {// 失败
             if (frame) {
+                av_frame_unref(frame);
                 releaseAVFrame(&frame);
             }
             break;
@@ -368,9 +369,11 @@ void AudioChannel::getPcm(int *p_int) {
                         out_channels; // 941通道样本数  *  2样本格式字节数  *  2声道数  =3764
         *p_int = pcm_data_size;
 
-        av_frame_unref(frame);
-        releaseAVFrame(&frame);
+        audio_time = frame->best_effort_timestamp * av_q2d(time_base);
 
         break;
     }
+
+    av_frame_unref(frame);
+    releaseAVFrame(&frame);
 }

@@ -2,9 +2,37 @@
 
 #include "VideoChannel.h"
 
-VideoChannel::VideoChannel(int stream_index, AVCodecContext *codecContext)
-        : BaseChannel(stream_index, codecContext) {
+/**
+ * 这里的解码包不需要考虑I帧的问题。
+ * @param q
+ */
+void task_drop_frame(queue<AVFrame *> &q) {
+    if (!q.empty()) {
+        AVFrame *frame = q.front();
+        BaseChannel::releaseAVFrame(&frame);
+        q.pop();
 
+    }
+}
+
+void task_drop_packet(queue<AVPacket *> &q) {
+    while (!q.empty()) {
+        AVPacket *packet = q.front();
+        if (packet->flags != AV_PKT_FLAG_KEY) { // 如果不是I帧
+            BaseChannel::releaseAVPacket(&packet);
+            q.pop();
+        } else {
+            break;
+        }
+    }
+}
+
+VideoChannel::VideoChannel(int stream_index, AVCodecContext *codecContext,
+                           AVRational time_base, int fps)
+        : BaseChannel(stream_index, codecContext, time_base) {
+    this->fps = fps;
+    packets.setSyncCallback(task_drop_packet);
+    frames.setSyncCallback(task_drop_frame);
 }
 
 VideoChannel::~VideoChannel() {
@@ -29,7 +57,7 @@ void VideoChannel::video_decode() {
 
     while (is_playing) {
         bool is_limit = false;
-        if(is_playing) {
+        if (is_playing) {
             beyondLimitsWithFrames(&is_limit);
         }
         if (is_limit) {
@@ -67,7 +95,8 @@ void VideoChannel::video_decode() {
             // 当不是关键帧时，无法通过单独的一帧解码。所以可以继续，参考下一帧进行解码。
             continue;
         } else if (result != 0) { // 失败
-            if(frame) {
+            if (frame) {
+                av_frame_unref(frame);
                 releaseAVFrame(&frame);
             }
             break;
@@ -144,6 +173,47 @@ void VideoChannel::video_play() {
         // 答：需要 宽/高/数据
 
         // 把渲染数据传递给player.cpp
+        // 在回调渲染之前，对视频帧进行数据进度矫正。
+        // 加入FPS间隔时间。
+        // 额外延时时间（在之前编码时，帧之间的延时时间）
+        double extra_delay = frame->repeat_pict / (2 * fps); // 可能获取不到(编码时没有加入额外延时)。
+        // fps延时时间 (计算每一帧的延时时间)
+        double fps_delay = 1.0 / fps;
+        // 当前帧的延时时间
+        double real_delay = fps_delay + extra_delay;
+        // 当前帧间隔. 这里只是根据视频的fps，进行间隔，与音频并不同步。
+//        av_usleep(real_delay * 1000000);
+
+        // 与音频同步
+
+        // 获取音视频的当前帧时间戳
+        double video_time = frame->best_effort_timestamp * av_q2d(time_base);
+        double audio_time = audio_channel->audio_time;
+        // 定义差值
+        double time_diff = video_time - audio_time;
+        // 判断两个时间差值
+        if (time_diff > 0) { // 视频播放相对音频较快
+            if (time_diff > 1) { // 视频播放速度比音频播放速度间隔大于1s(差距大)
+                av_usleep((real_delay * 2) * 1000000);
+            } else { // 视频播放速度比音频播放速度间隔小于1s(差距小)
+                av_usleep((real_delay + time_diff) * 1000000);
+            }
+        } else if (time_diff < 0) { // 音频播放相对视频较快
+            // 采用丢弃视频帧的方式，追赶音频的播放进度。
+            // 注意：不能随意丢弃，如果丢弃的是I帧，那么就会出现花屏。
+            // 当需要丢弃的进度非常小时，可以丢弃。因为这几个需要被丢弃的帧和当前显示的帧内容非常相近。
+            // 那么这个进度是多少呢？经验值为0.05个进度。
+            if (fabs(time_diff) <= 0.05) { // fabs()把数值取绝对值。
+                // 此处丢包时，涉及到多线程。
+
+                frames.sync();
+
+                continue;
+            }
+        } else { // 音视频播放完全同步
+
+        }
+
         renderCallback(dst_data[0],  // 数组被传递会退化成指针
                        codecContext->width,
                        codecContext->height,
@@ -177,4 +247,8 @@ void VideoChannel::start() {
 
 void VideoChannel::setRenderCallback(RenderCallback renderCallback) {
     this->renderCallback = renderCallback;
+}
+
+void VideoChannel::setAudioChannel(AudioChannel *channel) {
+    this->audio_channel = channel;
 }
