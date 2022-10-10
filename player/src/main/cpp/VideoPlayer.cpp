@@ -124,8 +124,13 @@ void VideoPlayer::prepare_() {
             && this->audio_channel == nullptr) { // 音频流
             this->audio_channel = new AudioChannel(stream_index, codecContext, time_base);
         }
-        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO
-            && this->video_channel == nullptr) { // 视频流
+        if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
+
+            // 如果该媒体流是封面流，只有一帧，那么跳过
+            if(stream->disposition == AV_DISPOSITION_ATTACHED_PIC) {
+                continue;
+            }
+
             // 获取视频的fps(一秒多少帧)
             AVRational fps_rational = stream->avg_frame_rate;
             int fps = av_q2d(fps_rational);
