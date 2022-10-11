@@ -369,7 +369,12 @@ void AudioChannel::getPcm(int *p_int) {
                         out_channels; // 941通道样本数  *  2样本格式字节数  *  2声道数  =3764
         *p_int = pcm_data_size;
 
+        // audio_time 获取的是当前时间戳，乘以时间基之后，单位变成秒.
         audio_time = frame->best_effort_timestamp * av_q2d(time_base);
+
+        if(this->helper) {
+            this->helper->onProgress(THREAD_CHILD, audio_time);
+        }
 
         break;
     }

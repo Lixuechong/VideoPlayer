@@ -9,6 +9,8 @@ VideoPlayer::VideoPlayer(const char *data_source, JNICallbackHelper *helper) {
     strcpy(this->data_source, data_source);
 
     this->helper = helper;
+
+    pthread_mutex_init(&seek_mutex, nullptr);
 }
 
 VideoPlayer::~VideoPlayer() {
@@ -20,6 +22,8 @@ VideoPlayer::~VideoPlayer() {
         delete this->helper;
         this->helper = nullptr;
     }
+
+    pthread_mutex_destroy(&seek_mutex);
 }
 
 /**
@@ -51,7 +55,10 @@ void VideoPlayer::prepare_() {
         return;
     }
 
-    // 第二步，查询媒体中的音视频流信息
+    // 这种方式获取mp4文件没有问题，但是获取flv文件获取不到。因为mp4的头文件中存在总时长信息。
+//    formatContext->duration;
+
+    // 第二步，查询媒体中的音视频流信息。avformat_find_stream_info会对整个流进行扫描
     result = avformat_find_stream_info(formatContext, nullptr);
     if (result < 0) {
         LOGD("第二步异常\n")
@@ -59,6 +66,9 @@ void VideoPlayer::prepare_() {
         this->helper->onError(error_info, THREAD_CHILD);
         return;
     }
+
+    // 此处需要除以时间基，因为formatContext->duration的单位是有理数(时间基)，不是总时长。
+    this->duration = formatContext->duration / AV_TIME_BASE;
 
     // 此时说明流是一个合格的流媒体。
 
@@ -123,11 +133,16 @@ void VideoPlayer::prepare_() {
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_AUDIO
             && this->audio_channel == nullptr) { // 音频流
             this->audio_channel = new AudioChannel(stream_index, codecContext, time_base);
+
+            if (this->duration) { // 非直播
+                audio_channel->setJniCallbackHelper(helper);
+            }
+
         }
         if (parameters->codec_type == AVMediaType::AVMEDIA_TYPE_VIDEO) { // 视频流
 
             // 如果该媒体流是封面流，只有一帧，那么跳过
-            if(stream->disposition == AV_DISPOSITION_ATTACHED_PIC) {
+            if (stream->disposition == AV_DISPOSITION_ATTACHED_PIC) {
                 continue;
             }
 
@@ -137,6 +152,10 @@ void VideoPlayer::prepare_() {
 
             this->video_channel = new VideoChannel(stream_index, codecContext, time_base, fps);
             this->video_channel->setRenderCallback(this->renderCallback);
+
+            if (this->duration) { // 非直播
+                video_channel->setJniCallbackHelper(helper);
+            }
         }
     }
 
@@ -206,8 +225,8 @@ void VideoPlayer::start_() {
             continue;
         }
 
-        LOGD("audio_channel size %d, is limit %d, video_channel size %d\n",
-             audio_channel->packets.size(), is_limit, video_channel->packets.size())
+//        LOGD("audio_channel size %d, is limit %d, video_channel size %d\n",
+//             audio_channel->packets.size(), is_limit, video_channel->packets.size())
 
         // AVPacket 是压缩包的类型(音频和视频的帧数据，都在这个包中)
         AVPacket *packet = av_packet_alloc();
@@ -267,6 +286,67 @@ void VideoPlayer::start() {
 
 void VideoPlayer::setRenderCallback(RenderCallback renderCallback) {
     this->renderCallback = renderCallback;
+}
+
+int VideoPlayer::fetch_duration() {
+    return this->duration;
+}
+
+void VideoPlayer::seek(int process) {
+
+    if (process < 0 || process > duration) {
+        return;
+    }
+    if (!audio_channel && !video_channel) {
+        return;
+    }
+    if (!formatContext) {
+        return;
+    }
+
+    pthread_mutex_lock(&seek_mutex);
+
+    LOGD("获取锁，进入线程")
+
+    /**
+     * 参数：
+     * formatContext    涉及到多线程，需要考虑线程安全。av_seek_frame会对context的成员进行操作。
+     * stream_index     默认为-1，ffmpeg自动选择对音频还是视频进行seek。
+     * timestamp        seek的进度，单位:时间基。
+     * flag             有几个类型：
+     *                      AVSEEK_FLAG_ANY      一定会播放seek后的进度，但是该包并不一定是I帧，所以可能会出现花屏。一般与 AVSEEK_FLAG_FRAME 配合使用.
+     *                      AVSEEK_FLAG_FRAME    找关键帧，但可能间隔过大。（当前seek的位置的包为B帧，但距离I帧有30帧，那么一旦跳到该I帧，那么画面就会出现与拖动的位置不符）
+     *                      AVSEEK_FLAG_BACKWARD 向后参考，如果seek后的包不是I帧，那么会向后寻找最近的I帧播放（若找不到会花屏）。
+     */
+    int result = av_seek_frame(formatContext, -1, process * AV_TIME_BASE,
+                               AVSEEK_FLAG_FRAME);
+
+
+
+    if (result > 0) {
+        // 音视频正在播放，用户seek。应该停掉播放的数据，把队列停掉。
+        if (audio_channel) {
+            audio_channel->packets.working(false);
+            audio_channel->frames.working(false);
+            audio_channel->packets.clear();
+            audio_channel->frames.clear();
+            audio_channel->packets.working(true); // 清除后继续工作
+            audio_channel->frames.working(true);
+        }
+
+        if (video_channel) {
+            video_channel->packets.working(false);
+            video_channel->frames.working(false);
+            video_channel->packets.clear();
+            video_channel->frames.clear();
+            video_channel->packets.working(true); // 清除后继续工作
+            video_channel->frames.working(true);
+        }
+    }
+    LOGD("锁，seek结束.result = %d\n", result)
+    pthread_mutex_unlock(&seek_mutex);
+
+    LOGD("释放锁，结束线程")
 }
 
 

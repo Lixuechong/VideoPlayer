@@ -15,21 +15,17 @@ class MainActivity : AppCompatActivity() {
 
     private var player: VideoPlayer? = null
 
-    private var surfaceView: SurfaceView? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        surfaceView = findViewById(R.id.surfaceView)
+        player = findViewById(R.id.video_player)
 
-        player = VideoPlayer()
         val file =
             File(Environment.getExternalStorageDirectory().absolutePath, "/big_buck_bunny.mp4");
         val path = file.path
         Log.d(TAG, path)
         player?.setDataSource(path)
-        player?.bindSurfaceView(surfaceView)
 
         player?.setOnPreparedListener {
             runOnUiThread {

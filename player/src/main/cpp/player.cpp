@@ -115,3 +115,22 @@ Java_com_lxc_player_VideoPlayer_setSurfaceNative(JNIEnv *env, jobject thiz, jobj
     window = ANativeWindow_fromSurface(env, surface);
     pthread_mutex_unlock(&static_mutex);
 }
+
+/**
+ * 获取视频的总时长
+ */
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_lxc_player_VideoPlayer_fetchDurationNative(JNIEnv *env, jobject thiz) {
+    if(player) {
+        return player->fetch_duration();
+    }
+    return 0;
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_lxc_player_VideoPlayer_seekNative(JNIEnv *env, jobject thiz, jint audio_time) {
+    if(player) {
+        player->seek(audio_time);
+    }
+}

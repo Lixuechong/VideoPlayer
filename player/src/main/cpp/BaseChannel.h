@@ -9,6 +9,7 @@ extern "C" {
 };
 
 #include "SafeQueue.h"
+#include "JNICallbackHelper.h"
 
 #define MAX_SIZE_QUEUE 100
 
@@ -25,6 +26,7 @@ public:
     AVCodecContext *codecContext = 0; // 音/视频解码器的上下文
 
     AVRational time_base; // 时间基
+    JNICallbackHelper *helper = 0;
 
     BaseChannel(int streamIndex, AVCodecContext *codecContext, AVRational time_base) :
             stream_index(streamIndex),
@@ -38,6 +40,10 @@ public:
     virtual ~BaseChannel() {
         packets.clear();
         frames.clear();
+    }
+
+    void setJniCallbackHelper(JNICallbackHelper * callback_helper) {
+        this->helper = callback_helper;
     }
 
     /**

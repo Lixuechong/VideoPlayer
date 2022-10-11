@@ -5,6 +5,7 @@
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
 #include "Log.h"
+#include "JNICallbackHelper.h"
 
 extern "C" {
 #include <libswresample/swresample.h> // 对pcm数据进行转换（重采样）？？？
@@ -57,6 +58,7 @@ public:
     void audio_play();
 
     void getPcm(int *);
+
 };
 
 #endif //VIDEOPLAYER_AUDIOCHANNEL_H

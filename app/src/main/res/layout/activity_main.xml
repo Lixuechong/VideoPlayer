@@ -6,33 +6,9 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <SurfaceView
-        android:id="@+id/surfaceView"
+    <com.lxc.player.VideoPlayer
+        android:id="@+id/video_player"
         android:layout_width="match_parent"
-        android:layout_height="200dp" />
-
-    <!-- 第五节课 第六节课 完成拖动条功能 -->
-    <!-- 进度条功能，后面看，现在先不管哈 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="30dp"
-        android:layout_margin="5dp">
-
-        <TextView
-            android:id="@+id/tv_time"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="00:00/00:00"
-            android:visibility="gone" />
-
-        <SeekBar
-            android:id="@+id/seekBar"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:max="100"
-            android:visibility="gone" />
-    </LinearLayout>
+        android:layout_height="wrap_content" />
 
 </LinearLayout>

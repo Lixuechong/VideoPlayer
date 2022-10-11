@@ -12,6 +12,7 @@ private:
     jobject job = 0;
     jmethodID jmd_prepared = 0;
     jmethodID jmd_error = 0;
+    jmethodID jmd_progress = 0;
 
 public:
     JNICallbackHelper(JavaVM *, JNIEnv *, jobject);
@@ -21,6 +22,8 @@ public:
     void onPrepared(int);
 
     void onError(char*, int);
+
+    void onProgress(int, int);
 };
 
 
