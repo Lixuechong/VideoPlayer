@@ -92,11 +92,24 @@ Java_com_lxc_player_VideoPlayer_startNative(JNIEnv *env, jobject thiz) {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_lxc_player_VideoPlayer_stopNative(JNIEnv *env, jobject thiz) {
+    if(player) {
+        player->stop();
+    }
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_lxc_player_VideoPlayer_releaseNative(JNIEnv *env, jobject thiz) {
+    pthread_mutex_lock(&static_mutex);
+    if (window) {
+        ANativeWindow_release(window);
+        window = nullptr;
+    }
+    pthread_mutex_unlock(&static_mutex);
+
+    // 释放资源
+    DELETE(player)
+    DELETE(vm)
 }
 
 /**
@@ -109,7 +122,7 @@ Java_com_lxc_player_VideoPlayer_setSurfaceNative(JNIEnv *env, jobject thiz, jobj
     // 需要检测上次的surface是否存在，存在需要清除之前的surface窗口。
     if (window) {
         ANativeWindow_release(window);
-        window = 0;
+        window = nullptr;
     }
     // 创建新的窗口
     window = ANativeWindow_fromSurface(env, surface);

@@ -27,6 +27,23 @@ VideoPlayer::~VideoPlayer() {
 }
 
 /**
+ * 解封装失败时释放
+ */
+void VideoPlayer::releaseWithFailed(int result) {
+    if (this->helper) {
+        char *error_info = av_err2str(result);
+        this->helper->onError(error_info, THREAD_CHILD);
+    }
+    if (formatContext) {
+        avformat_close_input(&formatContext);
+        avformat_free_context(formatContext);
+    }
+    if(codecContext) {
+        avcodec_free_context(&codecContext);
+    }
+}
+
+/**
  * 子线程回调的函数
  */
 void *task_prepare(void *args) {
@@ -50,8 +67,7 @@ void VideoPlayer::prepare_() {
     av_dict_free(&dictionary); // 释放字典,自我理解是把字典中的内容赋值到上下文中，所以此处不需要字典了。
     if (result) {
         LOGD("第一步异常\n")
-        char *error_info = av_err2str(result);
-        this->helper->onError(error_info, THREAD_CHILD);
+        releaseWithFailed(result);
         return;
     }
 
@@ -62,8 +78,7 @@ void VideoPlayer::prepare_() {
     result = avformat_find_stream_info(formatContext, nullptr);
     if (result < 0) {
         LOGD("第二步异常\n")
-        char *error_info = av_err2str(result);
-        this->helper->onError(error_info, THREAD_CHILD);
+        releaseWithFailed(result);
         return;
     }
 
@@ -71,6 +86,8 @@ void VideoPlayer::prepare_() {
     this->duration = formatContext->duration / AV_TIME_BASE;
 
     // 此时说明流是一个合格的流媒体。
+
+
 
     // 第三步，根据流信息，流的个数，用循环来找音频流和视频流。
     int stream_index = 0;
@@ -86,16 +103,14 @@ void VideoPlayer::prepare_() {
         AVCodec *codec = avcodec_find_decoder(parameters->codec_id);
         if (!codec) {
             LOGD("第六步异常\n")
-            char *error_info = av_err2str(result);
-            this->helper->onError(error_info, THREAD_CHILD);
+            releaseWithFailed(result);
         }
 
         // 第七步，通过上下文，协助解码器进行播放
-        AVCodecContext *codecContext = avcodec_alloc_context3(codec);
+        codecContext = avcodec_alloc_context3(codec);
         if (!codecContext) {
             LOGD("第七步异常\n")
-            char *error_info = av_err2str(result);
-            this->helper->onError(error_info, THREAD_CHILD);
+            releaseWithFailed(result);
             return;
         }
 
@@ -103,8 +118,7 @@ void VideoPlayer::prepare_() {
         result = avcodec_parameters_to_context(codecContext, parameters);
         if (result < 0) {
             LOGD("第八步异常\n")
-            char *error_info = av_err2str(result);
-            this->helper->onError(error_info, THREAD_CHILD);
+            releaseWithFailed(result);
             return;
         }
 
@@ -120,8 +134,7 @@ void VideoPlayer::prepare_() {
         if (result) {
             LOGD("第九步异常码:%d,流类型:%d,音频流编码:%d,视频流编码:%d\n", result, parameters->codec_type,
                  AVMediaType::AVMEDIA_TYPE_AUDIO, AVMediaType::AVMEDIA_TYPE_VIDEO)
-            char *error_info = av_err2str(result);
-            this->helper->onError(error_info, THREAD_CHILD);
+            releaseWithFailed(result);
             return;
         }
 
@@ -162,8 +175,7 @@ void VideoPlayer::prepare_() {
     // 第十一步，如果流中没有音频也没有视频。（对流进行再次校验）
     if (!this->audio_channel && !this->video_channel) {
         LOGD("第十一步异常\n")
-        char *error_info = av_err2str(result);
-        this->helper->onError(error_info, THREAD_CHILD);
+        releaseWithFailed(result);
         return;
     }
 
@@ -322,7 +334,6 @@ void VideoPlayer::seek(int process) {
                                AVSEEK_FLAG_FRAME);
 
 
-
     if (result > 0) {
         // 音视频正在播放，用户seek。应该停掉播放的数据，把队列停掉。
         if (audio_channel) {
@@ -347,6 +358,44 @@ void VideoPlayer::seek(int process) {
     pthread_mutex_unlock(&seek_mutex);
 
     LOGD("释放锁，结束线程")
+}
+
+void *task_stop(void *args) {
+    auto *player = static_cast<VideoPlayer *>(args);
+    player->stop_(player);
+    return nullptr;
+}
+
+void VideoPlayer::stop() {
+
+    helper = nullptr;
+
+    if (audio_channel) {
+        audio_channel->helper = nullptr;
+    }
+    if (video_channel) {
+        video_channel->helper = nullptr;
+    }
+    // 由于stop()函数在主线程中执行，而释放工作不能强制中断start_线程，所以开启子线程，等待start_执行完成后释放。
+    pthread_create(&pid_stop, nullptr, task_stop, this);
+}
+
+void VideoPlayer::stop_(VideoPlayer *player) {
+    is_playing = false;
+
+    // 让该子线程与pid_prepare和pid_start形成非分离线程。
+    pthread_join(pid_prepare, nullptr);
+    pthread_join(pid_start, nullptr);
+
+    if (formatContext) {
+        avformat_close_input(&formatContext);
+        avformat_free_context(formatContext);
+        formatContext = nullptr;
+    }
+
+    DELETE(audio_channel)
+    DELETE(video_channel)
+    DELETE(player)
 }
 
 

@@ -45,13 +45,51 @@ AudioChannel::AudioChannel(int stream_index, AVCodecContext *codecContext, AVRat
 }
 
 AudioChannel::~AudioChannel() {
-    if (out_buffers) {
-        delete out_buffers;
-        out_buffers = 0;
+    DELETE(out_buffers)
+    if(swr_ctx) {
+        swr_free(&swr_ctx);
     }
 }
 
 void AudioChannel::stop() {
+    // 此处需要等待解码线程和播放线程全部停止，才可以释放资源。形成非分离线程
+    pthread_join(pid_audio_decode, nullptr);
+    pthread_join(pid_audio_play, nullptr);
+
+    is_playing = false;
+    packets.working(false);
+    frames.working(false);
+
+    // OpenSLES释放工作
+    // 7.1 设置停止状态
+    if (bqPlayerPlay) {
+        (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_STOPPED);
+        bqPlayerPlay = nullptr;
+    }
+
+    // 7.2 销毁播放器
+    if (bqPlayerObject) {
+        (*bqPlayerObject)->Destroy(bqPlayerObject);
+        bqPlayerObject = nullptr;
+        bqPlayerBufferQueue = nullptr;
+    }
+
+    // 7.3 销毁混音器
+    if (outputMixObject) {
+        (*outputMixObject)->Destroy(outputMixObject);
+        outputMixObject = nullptr;
+    }
+
+    // 7.4 销毁引擎
+    if (engineObject) {
+        (*engineObject)->Destroy(engineObject);
+        engineObject = nullptr;
+        engineInterface = nullptr;
+    }
+
+    // 队列清空
+    packets.clear();
+    frames.clear();
 
 }
 

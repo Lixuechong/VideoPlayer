@@ -21,6 +21,7 @@ private:
     char *data_source = 0; // 指针初始化请赋值，否则该指针是野指针。
     pthread_t pid_prepare;
     pthread_t pid_start;
+    pthread_t pid_stop;
     AudioChannel *audio_channel = 0;
     VideoChannel *video_channel = 0;
     JNICallbackHelper *helper = 0;
@@ -29,6 +30,7 @@ private:
     int duration; // 视频总时长
 
     pthread_mutex_t seek_mutex; // 改变进度的锁
+    AVCodecContext *codecContext = nullptr;
 
 public:
     AVFormatContext *formatContext = 0;
@@ -41,6 +43,8 @@ public:
 
     void prepare_();
 
+    void releaseWithFailed(int);
+
     void start();
 
     void start_();
@@ -50,6 +54,10 @@ public:
     int fetch_duration();
 
     void seek(int);
+
+    void stop();
+
+    void stop_(VideoPlayer *);
 };
 
 
