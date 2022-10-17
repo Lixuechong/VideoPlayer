@@ -333,8 +333,8 @@ void VideoPlayer::seek(int process) {
     int result = av_seek_frame(formatContext, -1, process * AV_TIME_BASE,
                                AVSEEK_FLAG_FRAME);
 
-
-    if (result > 0) {
+    LOGD("before packets size = %d, frames size = %d \n", video_channel->packets.size(), video_channel->frames.size())
+    if (result >= 0) {
         // 音视频正在播放，用户seek。应该停掉播放的数据，把队列停掉。
         if (audio_channel) {
             audio_channel->packets.working(false);
@@ -353,6 +353,8 @@ void VideoPlayer::seek(int process) {
             video_channel->packets.working(true); // 清除后继续工作
             video_channel->frames.working(true);
         }
+
+        LOGD("after packets size = %d, frames size = %d \n", video_channel->packets.size(), video_channel->frames.size())
     }
     LOGD("锁，seek结束.result = %d\n", result)
     pthread_mutex_unlock(&seek_mutex);

@@ -80,9 +80,9 @@ public:
     /**
      * 设置工作状态，设置队列是否工作
      */
-    void working(bool work) {
+    void working(bool working) {
         pthread_mutex_lock(&mutex);
-        this->work = work;
+        this->work = working;
         pthread_cond_signal(&cond);// 唤醒其他线程开始工作。
         pthread_mutex_unlock(&mutex);
     }
